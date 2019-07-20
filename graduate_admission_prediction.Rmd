@@ -1,0 +1,116 @@
+---
+title: "Regression analysis: predicting graduate admission from important parameters"
+author: "Ruiqi Peng ruiqip2, Fangyi Zhang fangyiz2"
+date: "2019/7/20"
+output:
+  html_document:
+    toc: true
+    toc_depth: 4
+urlcolor: cyan
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. Introduction
+
+The dataset of this project is downloaded from:  
+https://www.kaggle.com/mohansacharya/graduate-admissions  
+which is brought by:  
+Mohan S Acharya, Asfia Armaan, Aneeta S Antony : A Comparison of Regression Models for Prediction of Graduate Admissions, IEEE International Conference on Computational Intelligence in Data Science 2019 
+
+This dataset includes possibly import parameters that can affect the admission to graduate schools in the U.S.
+
+The parameters contain the following: 
+
+* `GRE Score`
+* `TOEFL Score`
+* `University Rating` which denotes the rating of the applicant's undergraduate university
+* `SOP` which stands for Statement of Purpose
+* `LOR` which stands for letter of recommendation
+* `CGPA` which stands for the culmulative GPA
+* `Research` if the student has done an internship/equivalent research
+* `Chance of Admit` The chance to be admitted
+
+Getting a master degree is difficult and expensive. This project gives every student a chance to evaluate themselves by predicting their chances to get admitted, and thus decide if they should consider apply for a graduate education or not.
+
+Therefore, we aim to build a model that can perform good predictions on the chances of admission based on different parameters given by the student.
+
+# 2. Methods
+
+### 2.1 Loading and checking the data
+```{r}
+admission = read.csv('Admission_Predict_Ver1.1.csv', header = TRUE)
+sum(is.na(admission))
+#checking data types of each column
+sapply(admission, function(x){
+  return(typeof(x))
+})
+#admission$Research = as.factor(admission$Research)
+admission = subset(admission, select = -c(Serial.No.))
+```
+
+There isn't any missing value in the dataset, but the `serial no.` is useless for modeling.
+
+### 2.2 Randomly split the dataset into training and testing dataset
+
+```{r}
+admission_trn_idx  = sample(nrow(admission), size = trunc(0.50 * nrow(admission)))
+admission_trn_data = admission[admission_trn_idx, ]
+admission_tst_data = admission[-admission_trn_idx, ]
+```
+
+### 2.3 Collinearity of the data
+
+```{r}
+library(faraway)
+pairs(admission, col = "dodgerblue")
+range(cor(admission)[cor(admission) < 1])
+```
+
+The predictors averagely have high correlations with each other which ranges from 0.37 to 0.88. This indicates that we need variable selecting techniques to reduce the side effects resulted form multicollinearity.
+
+### 2.4 Setting up evaluating methods
+
+```{r}
+get_bp_decision = function(model, alpha) {
+  decide = unname(bptest(model)$p.value < alpha)
+  ifelse(decide, "Reject", "Fail to Reject")
+}
+
+get_sw_decision = function(model, alpha) {
+  decide = unname(shapiro.test(resid(model))$p.value < alpha)
+  ifelse(decide, "Reject", "Fail to Reject")
+}
+
+get_num_params = function(model) {
+  length(coef(model))
+}
+
+get_loocv_rmse = function(model) {
+  sqrt(mean((resid(model) / (1 - hatvalues(model))) ^ 2))
+}
+
+get_adj_r2 = function(model) {
+  summary(model)$adj.r.squared
+}
+
+get_prec_err = function(predicted, actual) {
+  mean(abs(actual - predicted) / predicted)
+}
+
+plot_fitted_resid = function(model, pointcol = "dodgerblue", linecol = "darkorange") {
+  plot(fitted(model), resid(model), 
+       col = pointcol, pch = 20, cex = 1.5,
+       xlab = "Fitted", ylab = "Residuals")
+  abline(h = 0, col = linecol, lwd = 2)
+}
+
+plot_qq = function(model, pointcol = "dodgerblue", linecol = "darkorange") {
+  qqnorm(resid(model), col = pointcol, pch = 20, cex = 1.5)
+  qqline(resid(model), col = linecol, lwd = 2)
+}
+```
+
+

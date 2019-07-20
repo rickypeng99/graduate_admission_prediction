@@ -1,7 +1,10 @@
 ---
 title: "Proposal fo Stat 420 project"
 date: "Summer 2019"
-output: html_document
+output:
+  html_document:
+    toc: true
+    toc_depth: 4
 urlcolor: cyan
 
 ---
@@ -38,11 +41,11 @@ The parameters contain the following:
 * `Research` if the student has done an internship/equivalent research
 * `Chance of Admit` The chance to be admitted
 
-## Inspiration & Interests
+### Inspiration & Interests
 
 Getting a master degree is difficult and expensive. This project gives every student a chance to evaluate themselves by predicting their chances to get admitted, and thus decide if they should consider apply for a graduate education or not.
 
-## Evidence of loading
+### Evidence of loading
 
 ```{r}
 admission = read.csv('Admission_Predict_Ver1.1.csv', header = TRUE)
