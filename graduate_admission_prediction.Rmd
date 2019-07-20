@@ -53,15 +53,7 @@ admission = subset(admission, select = -c(Serial.No.))
 
 There isn't any missing value in the dataset, but the `serial no.` is useless for modeling.
 
-### 2.2 Randomly split the dataset into training and testing dataset
-
-```{r}
-admission_trn_idx  = sample(nrow(admission), size = trunc(0.50 * nrow(admission)))
-admission_trn_data = admission[admission_trn_idx, ]
-admission_tst_data = admission[-admission_trn_idx, ]
-```
-
-### 2.3 Collinearity of the data
+### 2.2 Collinearity of the data
 
 ```{r}
 library(faraway)
@@ -71,7 +63,7 @@ range(cor(admission)[cor(admission) < 1])
 
 The predictors averagely have high correlations with each other which ranges from 0.37 to 0.88. This indicates that we need variable selecting techniques to reduce the side effects resulted form multicollinearity.
 
-### 2.4 Setting up evaluating methods
+### 2.3 Setting up evaluating methods
 
 ```{r}
 get_bp_decision = function(model, alpha) {
@@ -111,6 +103,14 @@ plot_qq = function(model, pointcol = "dodgerblue", linecol = "darkorange") {
   qqnorm(resid(model), col = pointcol, pch = 20, cex = 1.5)
   qqline(resid(model), col = linecol, lwd = 2)
 }
+```
+
+### 2.4 Randomly split the dataset into training and testing dataset
+
+```{r}
+admission_trn_idx  = sample(nrow(admission), size = trunc(0.50 * nrow(admission)))
+admission_trn_data = admission[admission_trn_idx, ]
+admission_tst_data = admission[-admission_trn_idx, ]
 ```
 
 
