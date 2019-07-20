@@ -1,0 +1,52 @@
+---
+title: "Proposal fo Stat 420 project"
+date: "Summer 2019"
+output: html_document
+urlcolor: cyan
+
+---
+
+### Tentative title
+
+Regression analysis: predicting graduate admission from important parameters
+
+### Teammates
+
+Ruiqi Peng - ruiqip2
+Fangyi Zhang - fangyiz2
+
+### Citation
+
+The dataset of this project is downloaded from:  
+https://www.kaggle.com/mohansacharya/graduate-admissions  
+which is brought by:  
+Mohan S Acharya, Asfia Armaan, Aneeta S Antony : A Comparison of Regression Models for Prediction of Graduate Admissions, IEEE International Conference on Computational Intelligence in Data Science 2019 
+
+### Dataset description
+
+
+The dataset “Graduate admission” is downloaded from Kaggle. This dataset includes possibly import parameters that can affect the admission to graduate schools in the U.S
+
+The parameters contain the following: 
+
+* `GRE Score`
+* `TOEFL Score`
+* `University Rating` which denotes the rating of the applicant's undergraduate university
+* `SOP` which stands for Statement of Purpose
+* `LOR` which stands for letter of recommendation
+* `CGPA` which stands for the culmulative GPA
+* `Research` if the student has done an internship/equivalent research
+* `Chance of Admit` The chance to be admitted
+
+## Inspiration & Interests
+
+Getting a master degree is difficult and expensive. This project gives every student a chance to evaluate themselves by predicting their chances to get admitted, and thus decide if they should consider apply for a graduate education or not.
+
+## Evidence of loading
+
+```{r}
+admission = read.csv('Admission_Predict_Ver1.1.csv', header = TRUE)
+head(admission)
+```
+
+
