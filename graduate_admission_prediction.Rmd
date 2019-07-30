@@ -66,6 +66,7 @@ The predictors averagely have high correlations with each other which ranges fro
 ### 2.3 Setting up evaluating methods
 
 ```{r}
+library(lmtest)
 get_bp_decision = function(model, alpha) {
   decide = unname(bptest(model)$p.value < alpha)
   ifelse(decide, "Reject", "Fail to Reject")
@@ -111,6 +112,65 @@ plot_qq = function(model, pointcol = "dodgerblue", linecol = "darkorange") {
 admission_trn_idx  = sample(nrow(admission), size = trunc(0.50 * nrow(admission)))
 admission_trn_data = admission[admission_trn_idx, ]
 admission_tst_data = admission[-admission_trn_idx, ]
+```
+
+### 2.5 Trying to fit model
+
+```{r}
+#以下纯草稿
+model_additive_all = lm(Chance.of.Admit ~ ., data =  admission)
+vif(model_additive_all)
+
+
+
+model_add_aic = step(model_additive_all)
+model_add_bic = step(model_additive_all, k = log(nrow(admission_trn_data)))
+
+get_bp_decision(model_add_aic, 0.05)
+get_sw_decision(model_add_aic, 0.05)
+get_num_params(model_add_aic)
+get_loocv_rmse(model_add_aic)
+get_adj_r2(model_add_aic)
+get_prec_err(predict(model_add_aic, newdata = admission_tst_data), admission_tst_data$Chance.of.Admit)
+plot_fitted_resid(model_add_aic)
+plot_qq(model_add_aic)
+
+#model_both = step(model_add_aic, direction = "forward", score = Chance.of.Admit ~ )
+
+summary(model_additive_all)$coefficients
+
+#consider interactions
+model_int_all = lm(Chance.of.Admit ~ .^2, data = admission_trn_data)
+model_int_all
+summary(model_int_all)
+model_add_bic = step(model_int_all, k = log(nrow(admission_trn_data)), trace = 0)
+model_add_aic = step(model_int_all, trace = 0)
+
+get_bp_decision(model_add_bic, 0.05)
+get_sw_decision(mode_add_bic, 0.05)
+get_num_params(mode_add_bic)
+get_loocv_rmse(mode_add_bic)
+get_adj_r2(mode_add_bic)
+get_prec_err(predict(mode_add_bic, newdata = admission_tst_data), admission_tst_data$Chance.of.Admit)
+plot_fitted_resid(mode_add_bic)
+plot_qq(mode_add_bic)
+
+vif(mode_add_bic)
+
+
+model
+
+
+mode_add_bic = lm(Chance.of.Admit ~ GRE.Score + TOEFL.Score + University.Rating + 
+    LOR + CGPA + Research + TOEFL.Score:Research, 
+    data = admission_trn_data)
+
+mode_add_bic
+
+
+cbind(predict(model_add_aic, newdata = admission_tst_data), admission_tst_data$Chance.of.Admit)
+cbind(predict(mode_add_bic, newdata = admission_tst_data), admission_tst_data$Chance.of.Admit)
+
 ```
 
 
