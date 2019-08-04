@@ -364,7 +364,7 @@ $\beta_\text{Uni_rating}$ = `-0.0114239`
 $\beta_{SOP}$ = `-0.0015859`  
 $\beta_{LOR}$ = `0.0178278`  
 $\beta_{CGPA}$ = `0.2901648`  
-$\beta_\text{Research}$ = `0.0329000`
+$\beta_\text{Research}$ = `0.0329000`  
 $\beta_\text{GRE.Score:CGPA}$ = `-0.0005569`  
 $\beta_\text{University.Rating:SOP}$ = `0.0034242`  
 
@@ -379,6 +379,14 @@ However, variables like `uni_rating`, which denotes the level of the applicant's
 #### 4.2.1 Usefulness
 
 As stated in the result, our model has achieved a overall good fitting. Therefore, assuming the dataset is real, then we should have a good estimate of the chances of admission based on the newdata that we input.
+
+For instance, let's say that Ricky, who is from University of Illinois, has an extremely high GRE TOEFL, and CGPA, he also has several letters of recommendations, statements of purposes, and he has participated in research as an undergrad. Ricky should be having a decent chance of getting into a grad shcool
+
+```{r}
+predict(new_int_2_aic, newdata = data.frame(GRE.Score = 335, TOEFL.Score = 115,  University.Rating = 5, SOP = 5.0, LOR = 5.0, CGPA = 9.8, Research = 1)) 
+```
+
+As a result, Ricky has a 97% chance to get into a grad school. A good student like Ricky should absolutely achieve a result like this.
 
 #### 4.2.2 Standardized regression coefficients
 The standardized regression coefficient denotes the relative influence of the parameters. In particular, this value represents the expected number of standard deviation change in the dependent variable from one standard deviation change in the predictor.
