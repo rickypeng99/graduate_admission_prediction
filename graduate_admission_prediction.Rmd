@@ -96,7 +96,7 @@ get_prec_err = function(predicted, actual) {
 plot_fitted_resid = function(model, pointcol = "dodgerblue", linecol = "darkorange") {
   plot(fitted(model), resid(model), 
        col = pointcol, pch = 20, cex = 1.5,
-       xlab = "Fitted", ylab = "Residuals")
+       xlab = "Fitted", ylab = "Residuals", main = "Fitted vs residual graph")
   abline(h = 0, col = linecol, lwd = 2)
 }
 
@@ -109,68 +109,305 @@ plot_qq = function(model, pointcol = "dodgerblue", linecol = "darkorange") {
 ### 2.4 Randomly split the dataset into training and testing dataset
 
 ```{r}
+set.seed(1999)
 admission_trn_idx  = sample(nrow(admission), size = trunc(0.50 * nrow(admission)))
 admission_trn_data = admission[admission_trn_idx, ]
 admission_tst_data = admission[-admission_trn_idx, ]
 ```
 
 ### 2.5 Trying to fit model
-
+We first start with the full additive model:
 ```{r}
-#以下纯草稿
 model_additive_all = lm(Chance.of.Admit ~ ., data =  admission)
+```
+```{r}
+summary(model_additive_all)
 vif(model_additive_all)
+```
+According to the summary of this full additive model, the p_value testing whether $\beta_{SOP}$ is zero or not is 0.728263, a relatively large p_value. This represents that we would highly possibly fail to reject the null hypothesis of $\beta_{SOP} = 0$, which means SOP might be a meaningless predictor.
+
+So, we decided to firstly remove the predictor "SOP".
+```{r}
+model_add_sop_rem = lm(Chance.of.Admit ~ . - SOP, data =  admission)
+```
+
+#### 2.5.1 AIC / BIC backwards on SOP-removed full additive model
+
+Then we run AIC and BIC on this SOP-removed full additive model.
+```{r}
+model_add_aic = step(model_add_sop_rem, trace = 0)
+model_add_bic = step(model_add_sop_rem, k = log(nrow(admission_trn_data)), trace = 0)
+vif(model_add_aic)
+vif(model_add_bic)
+```
+
+#### 2.5.2 AIC / BIC backwards on 2-way interactive model
+
+Another strong candidate for a starting model would be a model using all possible predictor as well as their 2-way interaction.
+```{r}
+model_int_2 = lm(Chance.of.Admit ~ .^2, data = admission_trn_data)
+vif(model_int_2)
+```
+
+We then also run AIC and BIC on this model, as there are a lot variables with high vif.
+```{r}
+model_int_2_aic = step(model_int_2, trace = 0)
+model_int_2_bic = step(model_int_2, k = log(nrow(admission_trn_data)), trace = 0)
+```
+
+### 2.6 Comparison of the four models (AIC_ADD, BIC_ADD, AIC_INT, BIC_INT)
+```{r}
+## additive
+# aic
+model_full_aic = cbind(get_bp_decision(model_add_aic, 0.05), get_sw_decision(model_add_aic, 0.05),
+get_num_params(model_add_aic),
+get_loocv_rmse(model_add_aic),
+get_adj_r2(model_add_aic),
+get_prec_err(predict(model_add_aic, newdata = admission_tst_data), admission_tst_data$Chance.of.Admit))
+# bic
+model_full_bic = cbind(get_bp_decision(model_add_bic, 0.05), 
+get_sw_decision(model_add_bic, 0.05), 
+get_num_params(model_add_bic), 
+get_loocv_rmse(model_add_bic), 
+get_adj_r2(model_add_bic), 
+get_prec_err(predict(model_add_bic, newdata = admission_tst_data), admission_tst_data$Chance.of.Admit))
+
+# 2-way interactive
+model_int_aic = cbind(get_bp_decision(model_int_2_aic, 0.05), 
+get_sw_decision(model_int_2_aic, 0.05), 
+get_num_params(model_int_2_aic), 
+get_loocv_rmse(model_int_2_aic), 
+get_adj_r2(model_int_2_aic), 
+get_prec_err(predict(model_int_2_aic, newdata = admission_tst_data), admission_tst_data$Chance.of.Admit))
+
+model_int_bic = cbind(get_bp_decision(model_int_2_bic, 0.05), 
+get_sw_decision(model_int_2_bic, 0.05), 
+get_num_params(model_int_2_bic), 
+get_loocv_rmse(model_int_2_bic), 
+get_adj_r2(model_int_2_bic), 
+get_prec_err(predict(model_int_2_bic, newdata = admission_tst_data), admission_tst_data$Chance.of.Admit))
+
+result = rbind(model_full_aic, model_full_bic, model_int_aic, model_int_bic)
+row.names(result) = c("Additive_aic", "Additice_bic", "Interactice_aic", "Interactive_bic")
 
 
+library(knitr)
+library(kableExtra)
 
-model_add_aic = step(model_additive_all)
-model_add_bic = step(model_additive_all, k = log(nrow(admission_trn_data)))
+result %>%
+  kable(col.names = c("Bptest decision", "Shapiro decision", "# of parameters", "loocv_rmse", "adjusted r squared", "percentage error error")) %>%
+  kable_styling()
 
-get_bp_decision(model_add_aic, 0.05)
-get_sw_decision(model_add_aic, 0.05)
-get_num_params(model_add_aic)
-get_loocv_rmse(model_add_aic)
-get_adj_r2(model_add_aic)
-get_prec_err(predict(model_add_aic, newdata = admission_tst_data), admission_tst_data$Chance.of.Admit)
-plot_fitted_resid(model_add_aic)
-plot_qq(model_add_aic)
-
-#model_both = step(model_add_aic, direction = "forward", score = Chance.of.Admit ~ )
-
-summary(model_additive_all)$coefficients
-
-#consider interactions
-model_int_all = lm(Chance.of.Admit ~ .^2, data = admission_trn_data)
-model_int_all
-summary(model_int_all)
-model_add_bic = step(model_int_all, k = log(nrow(admission_trn_data)), trace = 0)
-model_add_aic = step(model_int_all, trace = 0)
-
-get_bp_decision(model_add_bic, 0.05)
-get_sw_decision(mode_add_bic, 0.05)
-get_num_params(mode_add_bic)
-get_loocv_rmse(mode_add_bic)
-get_adj_r2(mode_add_bic)
-get_prec_err(predict(mode_add_bic, newdata = admission_tst_data), admission_tst_data$Chance.of.Admit)
-plot_fitted_resid(mode_add_bic)
-plot_qq(mode_add_bic)
-
-vif(mode_add_bic)
-
-
-model
-
-
-mode_add_bic = lm(Chance.of.Admit ~ GRE.Score + TOEFL.Score + University.Rating + 
-    LOR + CGPA + Research + TOEFL.Score:Research, 
-    data = admission_trn_data)
-
-mode_add_bic
-
-
-cbind(predict(model_add_aic, newdata = admission_tst_data), admission_tst_data$Chance.of.Admit)
-cbind(predict(mode_add_bic, newdata = admission_tst_data), admission_tst_data$Chance.of.Admit)
 
 ```
 
+Comparing the above 4 models, we deicide to pick the 2-way interactive model that is selected by AIC backwards.
+
+### 2.7 Discovering model violations
+Now we need to address with the model violations in this 2-way interactive model
+```{r}
+plot_fitted_resid(model_int_2_aic)
+plot_qq(model_int_2_aic)
+```
+
+The normal qq plot and the fitted_resid plot for the model doesn't seem too good. In addition, we also reject the sw and bp tests. We hope to see if the violation of normality and constant variance is resulted from unusual observations  
+
+### 2.8 Outlier diagnosis
+
+#### 2.8.1 Influential points
+
+Influential points are measured by the cook's distance, typically, an observation is classfied as influential if its cook's distance is larger than 4/n. We therefore decided to remove the influential observations from the training dataset and see if the results will be better.
+
+```{r}
+cook_int_aic = cooks.distance(model_int_2_aic)
+new_int_2_aic = lm(Chance.of.Admit ~ GRE.Score + TOEFL.Score + University.Rating + 
+    SOP + LOR + CGPA + Research + GRE.Score:CGPA + University.Rating:SOP, 
+    data = admission_trn_data, subset = cook_int_aic < 4 / length(cook_int_aic))
+
+plot_fitted_resid(new_int_2_aic)
+plot_qq(new_int_2_aic)
+
+```
+
+As the previous graphs haven shown, after the removal of influential points, the normal qq plot and the fitted vs residual graph look much better. Denoting that the original dataset didn't follow a normal distribution and a constant variance assumpition. Therefore, we should not be surprised with the violations. 
+
+```{r}
+new_int_2_aic_row = cbind(get_bp_decision(new_int_2_aic, 0.05), 
+get_sw_decision(new_int_2_aic, 0.05), 
+get_num_params(new_int_2_aic), 
+get_loocv_rmse(new_int_2_aic), 
+get_adj_r2(new_int_2_aic), 
+get_prec_err(predict(new_int_2_aic, newdata = admission_tst_data), admission_tst_data$Chance.of.Admit))
+
+result = rbind(new_int_2_aic_row)
+row.names(result) = c("Without influential")
+
+library(knitr)
+library(kableExtra)
+
+result %>%
+  kable(col.names = c("Bptest decision", "Shapiro decision", "# of parameters", "loocv_rmse", "adjusted r squared", "percentage error error")) %>%
+  kable_styling()
+
+```
+
+The testing results from the model trainied by dataset without influential points also seem to be better than before.
+
+#### 2.8.2 Leverages
+
+Leverages from the orifinal data can also violate the model assumption. 
+```{r}
+hat_values_model = hatvalues(model_int_2_aic)[hatvalues(model_int_2_aic) > 2 * mean(hatvalues(model_int_2_aic))]
+length(hat_values_model) / length(hatvalues(model_int_2_aic))
+```
+
+Although the amount of leverages aren't significant, we will still try to remove the leverages from the dataset and see if the model can be improved.
+
+```{r}
+new_int_2_aic_no_leverage = lm(Chance.of.Admit ~ GRE.Score + TOEFL.Score + University.Rating + 
+    SOP + LOR + CGPA + Research + GRE.Score:CGPA + University.Rating:SOP, 
+    data = admission_trn_data, subset = cook_int_aic < 4 / length(cook_int_aic) || hatvalues(model_int_2_aic) < 2 * mean(hatvalues(model_int_2_aic)))
+
+plot_fitted_resid(new_int_2_aic_no_leverage)
+plot_qq(new_int_2_aic_no_leverage)
+
+new_int_2_aic_no_leverage_row = cbind(get_bp_decision(new_int_2_aic_no_leverage, 0.05), 
+get_sw_decision(new_int_2_aic_no_leverage, 0.05), 
+get_num_params(new_int_2_aic_no_leverage), 
+get_loocv_rmse(new_int_2_aic_no_leverage), 
+get_adj_r2(new_int_2_aic_no_leverage), 
+get_prec_err(predict(new_int_2_aic_no_leverage, newdata = admission_tst_data), admission_tst_data$Chance.of.Admit))
+
+result = rbind(new_int_2_aic_no_leverage_row)
+row.names(result) = c("Without influential & leverages")
+library(knitr)
+library(kableExtra)
+
+result %>%
+  kable(col.names = c("Bptest decision", "Shapiro decision", "# of parameters", "loocv_rmse", "adjusted r squared", "percentage error error")) %>%
+  kable_styling()
+```
+
+#### 2.8.3 Comparison between removing influential points & removing both of influential and leverages
+
+```{r}
+result = rbind(new_int_2_aic_row ,new_int_2_aic_no_leverage_row)
+row.names(result) = c("Without influential", "Without influential & leverages")
+
+library(knitr)
+library(kableExtra)
+
+result %>%
+  kable(col.names = c("Bptest decision", "Shapiro decision", "# of parameters", "loocv_rmse", "adjusted r squared", "percentage error error")) %>%
+  kable_styling()
+```
+
+Despite the fact that the removed leverages and influtiential points didn't reject to have a constant variance. The model that is trained by only removing the influential points win by having much better testing results and failure to reject the shapiro decision. 
+
+
+## 3. Result
+
+### 3.1 Decision
+
+Based on the analysis abvove, we decided to choose the model that is built based on the AIC backwards on full 2-way interactive model, and the removal of influential data from the training dataset. In detail, the model will be illustrated as the following:
+
+\[
+Chance = \beta_0 + \beta_{GRE}x_1 + \beta_{TOEFL}x_2 + \beta_\text{Uni_Rating}x_3 + \beta_{SOP}x_4 + \beta_{LOR}x_5 + \beta_{CGPA}x_6 + \beta_{Research}x_7 + \beta_\text{GRE.Score:CGPA}x_8 + \beta_\text{University.Rating:SOP}x_9
+\]
+
+### 3.2 Summary of the "best" model
+
+Below is the result of the best model's predicted value vs the test data. We can oberserve that the model is surely doing a good job in fitting the values. Most of the combination of prediction vs testing lies around the red line of y = x
+
+```{r}
+plot(predict(new_int_2_aic, newdata = admission_tst_data), admission_tst_data$Chance.of.Admit, xlab = "predicted values", ylab = "actual test values", main = "Predicted vs testing data graph")
+abline(0, 1, col = "red")
+```
+
+The average percentage error of the "best" model is:
+
+```{r}
+get_prec_err(predict(new_int_2_aic, newdata = admission_tst_data), admission_tst_data$Chance.of.Admit)
+```
+
+A 6% percentage error is pretty good.
+
+Below is the summary of the "best" model:
+
+Estimates of parameters from the model:
+```{r}
+summary(new_int_2_aic)$coefficients[,1]
+```
+
+R_squared:
+
+```{r}
+summary(new_int_2_aic)$r.squared
+
+```
+
+Adjusted r_squared:
+
+```{r}
+summary(new_int_2_aic)$adj.r.squared
+```
+
+## 4.Discussion
+
+### 4.1 Context of the model
+Accoding to the model, each of the $\beta$ values are listed as the following:
+
+$\beta_0$ = `-2.5813632`  
+$\beta_{GRE}$ = `0.0063032`  
+$\beta_{TOEFL}$ = `0.0024523`  
+$\beta_\text{Uni_rating}$ = `-0.0114239`  
+$\beta_{SOP}$ = `-0.0015859`  
+$\beta_{LOR}$ = `0.0178278`  
+$\beta_{CGPA}$ = `0.2901648`  
+$\beta_\text{Research}$ = `0.0329000`
+$\beta_\text{GRE.Score:CGPA}$ = `-0.0005569`  
+$\beta_\text{University.Rating:SOP}$ = `0.0034242`  
+
+For each of the beta values denoting the amount of average chance of admission change given a one unit change of a specific predictor. Notably, as `Research` itself is a binary response, it makes $\beta_{Research}$ only useful in calculation only when a student has a research.
+
+In our common sense, we would believe that all the parameters should be positively impacting the chance of admission, as they are good traits of students that admission office is looking for. By conencting such common sense to our model, we do notice that the important factors such as `GRE`,`TOEFL`, `CGPA` be hugely positively affecting the chance of admission, which is similar to what we would have believed. 
+
+However, variables like `uni_rating`, which denotes the level of the applicant's undergrad university appears to be negative. This is unusual as we typically believe that better undergrad degree should somewhat aid an applicant for a better grad degree. The result of this migh give us several suggestions, such that the American undergrad admission system possibly lacks the ability of distinguishing students, which makes stronger students distributed in a wide range of universities. For instance, despite the fact that the UC Berkeley is considered as a better public university of Illinois in many ranking methodologies, there still can be brighter students who goes to U of illinois instead of UC Berkeley. However, it is also possible that the `university_rating` doesn't affect too much in the graduate admission, such that it becomes slightly negative. 
+
+### 4.2 Applications
+
+#### 4.2.1 Usefulness
+
+As stated in the result, our model has achieved a overall good fitting. Therefore, assuming the dataset is real, then we should have a good estimate of the chances of admission based on the newdata that we input.
+
+#### 4.2.2 Standardized regression coefficients
+The standardized regression coefficient denotes the relative influence of the parameters. In particular, this value represents the expected number of standard deviation change in the dependent variable from one standard deviation change in the predictor.
+
+```{r}
+estimates = summary(new_int_2_aic)$coefficients[,1]
+standard_deviations = sapply(admission_trn_data, function(x){
+    return(sd(x))
+})
+poolSD = standard_deviations / sd(admission_trn_data$Chance.of.Admit)
+#gre toefl uni_rat sop lor cgpa research
+standardized_coefficient = c(poolSD[1] * estimates[2],
+poolSD[2] * estimates[3],
+poolSD[3] * abs(estimates[4]),
+poolSD[4] * abs(estimates[5]),
+poolSD[5] * estimates[6],
+poolSD[6] * estimates[7],
+poolSD[7] * estimates[8])
+
+standardized_coefficient
+```
+
+According to the standardardized_coefficient calculted above, we immediately know that the the `CGPA` and `GRE` are the most important parameters, besides from these two significant parameters, the letters of recommendation and TOEFL score are also important. 
+
+## 5. Appendix
+
+Summary of the best model:
+
+```{r}
+summary(new_int_2_aic)
+```
 

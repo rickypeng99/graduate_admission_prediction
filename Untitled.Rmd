@@ -1,0 +1,750 @@
+---
+title: "Speed Dating Prediction"
+author: "Group 37, Xin Qu, NetID: xinq2; Biruo Zhao, NetID: biruoz2; Chen Ling, NetID: ling10; Luwei Zhang, NetID: luwei2"
+output:
+  html_document: 
+    toc: yes
+  pdf_document: default
+urlcolor: cyan
+---
+
+***
+## Introduction
+
+This dataset was compiled by Columbia Business School professors Ray Fisman and Sheena Iyengar for their paper [Gender Differences in Mate Selection: Evidence From a Speed Dating Experiment](http://faculty.chicagobooth.edu/emir.kamenica/documents/genderDifferences.pdf). The dataset is available on [Kaggle](https://www.kaggle.com/annavictoria/speed-dating-experiment/home).
+
+Data was gathered from participants in experimental speed dating events from 2002-2004. During the events, the attendees would have a four minute "first date" with every other participant of the opposite sex. At the end of their four minutes, participants were asked if they would like to see their date again. They were also asked to rate their date on six attributes: Attractiveness, Sincerity, Intelligence, Fun, Ambition, and Shared Interests.
+
+The dataset also includes questionnaire data gathered from participants at different points in the process. These fields include: demographics, dating habits, self-perception across key attributes, beliefs on what others find valuable in a mate, and lifestyle information. See the attached Speed Dating Data Key document for details.
+
+**The aim of this project is two-fold: explanation and prediction**. In this project, we want to explore what people are looking for in their speed dating partners (attractive, sincere, intelligent, fun, ambitious or shared interests/hobbies), what it takes to get high scores from a potential partner and if any other factors (gender, age, same race etc.) influence peoples' decisions. 
+
+There are 8378 observations with 195 variables in the dataset. **The response we're focusing on is `like_o` which is the rating of how much a participant likes his/her speed-dating partner **and we believe this numerical value is a good measurement of a person's overall success in the speed dating experiment. 
+
+- `like_o`: rate of like of speed-dating partner
+
+**And the predictors under consideration include: ** 
+
+- `age_o`: age of speed-dating partner
+
+- `attr_o`: rate of attractiveness of speed-dating partner
+
+- `sinc_o`: rate of sincerity of speed-dating partner
+
+- `intel_o`: rate of intelligence of speed-dating partner
+
+- `fun_o`: rate of fun of speed-dating partner
+
+- `amb_o`: rate of ambition of speed-dating partner
+
+- `shar_o`: rate of shared interests of speed-dating partner
+
+- `gender`: gender of speed-dating partner, 0 stands for male and 1 stands for female
+
+- `samerace`: whether participant and partner were the same race, 0 stands for no and 1 stands for yes
+
+- `dec_o`: decision to see partner again, 0 stands for no and 1 stands for yes
+
+- `match`: a match occurs when both participant and partner check "yes" for decision
+
+Our purpose is to build a "best" model to explain and predict the relationship between the response and the predictors. We are looking for a linear model that is small and interpretable, but still fits the data well. Since what we have here in the speed dating experiment is observational data and with observational data, we can only detect associations.
+
+For the purpose of explanation, our project will utilize the following concepts and strategies:
+
+- Multiple linear regression
+- Dummy variables
+- Assumption diagnostics
+- Collinearity
+- Outlier diagnostics
+- Interaction
+- Transformations
+- Polynomial regression
+- Model selection
+
+For the purpose of prediction, this project will also apply the following concepts and strategies:
+
+- Test-Train Split
+- Residual diagnostics
+- Outlier diagnostics
+- Model selection
+
+The `library` used in this project:
+
+- library(readr)
+
+- library(lmtest)
+
+- library(faraway)
+
+- library(MASS)
+
+- library(knitr)
+
+
+## Methods
+```{r}
+library(readr)
+library(lmtest)
+library(faraway)
+library(MASS)
+library(knitr)
+```
+
+### 1. Load and clean the data by removing irrelevant variables 
+```{r}
+# coerce categorical variable to be factor variables
+rawdata = read.csv('Speed Dating Data.csv')
+rawdata$gender = as.factor(rawdata$gender)
+rawdata$samerace = as.factor(rawdata$samerace)
+rawdata$dec_o = as.factor(rawdata$dec_o)
+rawdata$match = as.factor(rawdata$match)
+```
+
+```{r}
+selected_data = subset(rawdata, select = 
+                     c("age_o","attr_o","sinc_o","intel_o","fun_o","amb_o","shar_o","like_o","gender","samerace","match","dec_o"))
+selected_data = selected_data[complete.cases(selected_data), ] # find complete data
+```
+
+### 2. Split data into `train` and `test` two subsets 
+
+The `train` subset contains 4850 observations (70% of the total valid observations) and the `test` dataset contains the rest. 
+
+```{r}
+set.seed(1)
+train_idx  = sample(nrow(selected_data), size = nrow(selected_data)*0.7)
+train_data = selected_data[train_idx, ]
+test_data = selected_data[-train_idx, ]
+```
+
+### 3. Model Building
+
+Useful tests or concepts used for model building:
+
+- Fitted versus Residuals Plot
+
+- Q-Q Plot
+
+- Breusch-Pagan Test
+
+- Shapiro-Wilk Test
+
+- Parametric approach
+
+- Leverage
+
+- Adjusted $R^2$
+
+- Average Percentage Error
+
+- AIC
+
+- BIC
+
+- LOOCV RMSE
+
+```{r}
+# Fitted versus Residuals Plot
+plot_fitted_resid = function(model, pointcol = "dodgerblue", linecol = "darkorange") {
+  plot(fitted(model), resid(model), 
+       col = pointcol, pch = 20, cex = 1.5,
+       xlab = "Fitted", ylab = "Residuals")
+  abline(h = 0, col = linecol, lwd = 2)
+}
+# Q-Q plot
+plot_qq = function(model, pointcol = "dodgerblue", linecol = "darkorange") {
+  qqnorm(resid(model), col = pointcol, pch = 20, cex = 1.5)
+  qqline(resid(model), col = linecol, lwd = 2)
+}
+# bptest
+get_bp_decision = function(model, alpha) {
+  decide = unname(bptest(model)$p.value < alpha)
+  ifelse(decide, "Reject", "Fail to Reject")
+}
+# swtest
+get_sw_decision = function(model, alpha) {
+  decide = unname(shapiro.test(resid(model))$p.value < alpha)
+  ifelse(decide, "Reject", "Fail to Reject")
+}
+
+get_num_params = function(model) {
+  length(coef(model))
+}
+
+get_loocv_rmse = function(model) {
+  sqrt(mean((resid(model) / (1 - hatvalues(model))) ^ 2))
+}
+
+get_adj_r2 = function(model) {
+  summary(model)$adj.r.squared
+}
+# average percentage error
+get_prec_err = function(actual, predicted) {
+  mean(abs(predicted - actual) / actual)
+}
+```
+
+#### 3.1 Check collinearity of the data:
+
+```{r}
+#pairs(train_data, col = "dodgerblue")
+cor(train_data[,2:7])
+```
+Overall, collinearity is around 0.4 ~ 0.6, there are no obvious highly-related attributes.
+
+#### 3.2 Start with a simple additive model with all possible attributes (Set $\alpha = 0.05$):
+
+```{r}
+simple_model = lm(like_o ~ . , data = train_data)
+vif(simple_model)
+# check the maximum VIF
+vif(simple_model)[which.max(vif(simple_model))]
+vif(simple_model)[which.max(vif(simple_model))] < 5
+summary(simple_model)$r.squared
+get_num_params(simple_model)
+get_loocv_rmse(simple_model)
+get_adj_r2(simple_model)
+get_bp_decision(simple_model, 0.05)
+get_sw_decision(simple_model, 0.05)
+```
+
+From the above code, the maximum VIF is `r max(vif(simple_model))` <= 5, which is not high, but from $R^2$ value, we see about 68.0% data is explained by this model and there are `r get_num_params(simple_model)` $\beta$s in the model. Next, we will try to find a "better" model with higher $R^2$ (> `r summary(simple_model)$r.squared`) or adjusted $R^2$ (> `r get_adj_r2(simple_model)`)  and lower value of `LOOCV_RMSE` (< `r get_loocv_rmse(simple_model)`) to explain the data. 
+
+#### 3.3 Build more complex models (start with a two-way interaction model):
+
+```{r}
+inter_model = lm(like_o ~ .^2, data = train_data)
+# use backward AIC & BIC to find a selected model
+aic = step(inter_model, direction = "backward", trace = 0)
+bic = step(inter_model, direction = "backward", k = log(nrow(train_data)), trace = 0)
+```
+
+#### 3.4 Check the VIF of both selected model and number of predictors:
+
+```{r}
+#get_loocv_rmse(aic)
+vif(aic)
+max(vif(aic))
+#get_loocv_rmse(bic)
+vif(bic)
+max(vif(bic))
+get_num_params(aic)
+get_num_params(bic)
+```
+Both models seem to have pretty high maximum VIF, which suggests multicollinearity. Next, we try to find a new pair of models with smaller value of maximum VIF. 
+
+#### 3.5 Build models without multicollinearity:
+
+Find significant variables from the interaction model. Set $\alpha = 0.05$
+```{r}
+alpha = 0.05
+variables = summary(inter_model)$coef[, 'Pr(>|t|)'] < alpha 
+variables
+length(variables)
+```
+From the above code, we can see that among `r length(variables)` variables, variables `attr_o`, `shar_o`, `gender1`, `dec_o1` and the interaction items,  `age_o:shar_o`, `attr_o:samerace1`, `shar_o:dec_o1` and `gender1:dec_o1` are significant. 
+
+Start with the interaction model with all significant variables listed above and find a new pair of `aic_new` and `bic_new` model. 
+```{r}
+int_model = lm(like_o ~ . + age_o : shar_o + attr_o : samerace + shar_o : dec_o + gender : dec_o, data = train_data)
+aic_new = step(int_model, direction = "backward", trace = 0)
+bic_new = step(int_model, direction = "backward", k = log(nrow(train_data)), trace = 0)
+```
+List predictors of both model.
+```{r}
+coef(aic_new)
+coef(bic_new)
+```
+
+#### 3.6 Check the VIF of new models and the number of predictors:
+
+```{r}
+#get_loocv_rmse(aic_new)
+vif(aic_new)
+max(vif(aic_new))
+#get_loocv_rmse(bic_new)
+vif(bic_new)
+max(vif(bic_new))
+get_num_params(aic_new)
+get_num_params(bic_new)
+```
+
+#### 3.7 Comparison of the four selected models:
+
+##### 3.7.1 Check values of `LOOCV_RMSE`, adjusted $R^2$, number of $\beta$s and maximum VIF
+
+```{r}
+#aic_vif_max = c(max(vif(aic)), max(vif(aic_new)))
+#bic_vif_max = c(max(vif(bic)), max(vif(bic_new)))
+com_tables = data.frame("max_VIF" = c(max(vif(aic)), max(vif(aic_new)), max(vif(bic)), max(vif(bic_new))), "Number_of_betas" = c(get_num_params(aic), get_num_params(aic_new), get_num_params(bic), get_num_params(bic_new)), "LOOCV_RMSE" = c(get_loocv_rmse(aic), get_loocv_rmse(aic_new), get_loocv_rmse(bic), get_loocv_rmse(bic_new)), "adj.R_2" = c(get_adj_r2(aic), get_adj_r2(aic_new), get_adj_r2(bic), get_adj_r2(bic_new)))
+rownames(com_tables) = c("AIC", "AIC_new", "BIC", "BIC_new")
+knitr::kable(com_tables)
+```
+
+From the table above, we could tell the new pair of aic and bic models have much smaller maximum VIF and much less predictors than the old pair. And their values of `LOOVC_RMSE` and adjusted $R^2$ do not change a lot, their values of `LOOCV_RMSE` raise a little bit and values of adjusted $R^2$ drop a little bit compared to the old pair which is acceptable. We choose these two new models to be our selected models. 
+
+##### 3.7.2 Check assumption violation
+
+```{r}
+###aic_new
+plot_fitted_resid(aic_new)
+plot_qq(aic_new)
+#bptest(aic_new)
+#shapiro.test(resid(aic_new))
+get_bp_decision(aic_new, alpha)
+get_sw_decision(aic_new, alpha)
+
+
+##bic_new
+plot_fitted_resid(bic_new)
+plot_qq(bic_new)
+#bptest(bic_new)
+#shapiro.test(resid(bic_new))
+get_bp_decision(bic_new, alpha)
+get_sw_decision(bic_new, alpha)
+```
+
+From the "Fitted vs Residuals" plot and "Q-Q" plot, both two selected models look pretty good. But from the results of "Shapiro-Wilk normality test" and "Breusch-Pagan test", the p-values are pretty small, which means both constant variance and normality assumptions have been violated. We are not surprised to see this violation due to the data distribution (majority of the numeric variables in the dataset are intergers from 0 to 10). 
+
+##### 3.7.3 Model comparison between the new pair of selected models
+
+Since `aic_new` and `bic_new` are nested, we could conduct an `F` test: 
+```{r}
+anova(bic_new, aic_new)
+```
+
+- The null hypothesis
+
+$\beta_\text{age_o} = \beta_\text{samerace} = \beta_\text{match} = \beta_\text{age_o:shar_o} = \beta_\text{attr_o:samerace} = \beta_\text{gender:dec_o} = 0$
+
+- The test statistic
+```{r}
+anova(bic_new, aic_new)[2, "F"]
+```
+
+- The p-value
+```{r}
+anova(bic_new, aic_new)[2, "Pr(>F)"]
+```
+
+- A decision
+
+Since the p-value of the test is `r anova(bic_new, aic_new)[2, "Pr(>F)"]`, pretty small, we reject the null hypothesis and prefer the model with more predictors, which is the `aic_new` model. 
+
+Based the `F` test result, we might prefer the model with more predictors, but we would like to compare two models' value of `LOOCV_RMSE`, maximum VIF, adjusted $R^2$ and number of $\beta$s before jump to any conclusion. 
+
+```{r}
+tables_3 = data.frame("max_VIF" = c(max(vif(aic_new)), max(vif(bic_new))), "Number_of_betas" = c(get_num_params(aic_new), get_num_params(bic_new)), "LOOCV_RMSE" = c(get_loocv_rmse(aic_new),  get_loocv_rmse(bic_new)), "adj.R_2" = c(get_adj_r2(aic_new), get_adj_r2(bic_new)))
+rownames(tables_3) = c("AIC_new", "BIC_new")
+knitr::kable(tables_3)
+```
+
+From the table above, `bic_new` model has 7 predictors less than `aic_new` model while its value of `LOOCV_RMSE` is only a little bit higher than the `aic_new` model and its adjusted $R^2$ is only a little bit smaller. With small difference in `LOOCV_RMSE` and  adjusted $R^2$ , we're looking for a smaller and easier-to-interpret model, therefore we come to the conclusion that `bic_new` model is better than `aic_new` model. 
+
+##### 3.7.4 Model comparison with simple model
+
+Comparison with `simple_model` (the additive model with all variables)
+
+```{r}
+tables_4 = data.frame("max_VIF" = c(max(vif(simple_model)), max(vif(bic_new))), "Number_of_betas" = c(get_num_params(simple_model), get_num_params(bic_new)), "LOOCV_RMSE" = c(get_loocv_rmse(simple_model), get_loocv_rmse(bic_new)), "adj.R_2" = c(get_adj_r2(simple_model), get_adj_r2(bic_new)))
+rownames(tables_4) = c("simple_model", "bic_new")
+knitr::kable(tables_4)
+```
+
+Based on the table above, `bic_new` model has 4 predictors less than the simple additive model, smaller value of `LOOCV_RMSE` and higher value of adjusted $R^2$. Therefore we arrive at a conclusion that `bic_new` model is better than `simple_model` model (additive model). 
+
+**In conclusion, the "best" model we find in this project would be `bic_new` model. Next, we will go through some evaluations on this model.**
+
+## Results
+
+Based on the previous sections, we find our "best" model so far using `train_data` subset:
+
+\[
+\hat{\text{like_o}} = \hat\beta_0 + \hat\beta_1 x_{\text{attr_o}} + \hat\beta_2 x_{\text{sinc_o}} + \hat\beta_3 x_{\text{intel_o}} + \hat\beta_4 x_{\text{fun_o}} + \hat\beta_5 x_{\text{shar_o}} + \hat\beta_6 x_{\text{dec_o}} + \hat\beta_7 x_{\text{shar_o}} x_{\text{dec_o}}
+\]
+
+- `dec_o` is the dummy variable, $\text{dec_o} = 1$ when making the decision to see partner again, $\text{dec_o} = 0$ when making the decision not to see partner again. 
+
+### 1. Summary of the "best" model
+
+```{r}
+summary(bic_new)
+coef(bic_new)
+```
+
+```{r}
+plot_fitted_resid(bic_new)
+plot_qq(bic_new)
+bptest(bic_new)$p.value
+shapiro.test(resid(bic_new))$p.value
+```
+
+The "best" model has 8 predictors. The "Fitted vs Residuals" plot and "Q-Q" plot look pretty good, however, both p-value from Shapiro-Wilk Test and Breusch-Pagan Test are pretty small, which mean the normality and constant variance assumptions violation. But we are not surprised to see the violation, it may due to the original distribution of data set does not follow neither normal distribution nor constant variance. 
+
+### 2. Use `test` data to evaluate model
+
+- calculate the average percent error:
+\[
+\frac{1}{n}\sum_i\frac{|\text{predicted}_i - \text{actual}_i|}{\text{actual}_i} \times 100
+\]
+- Plot the predicted versus the actual values and add the line $y = x$. 
+
+```{r}
+get_prec_err(predict(bic_new, test_data), test_data$like_o)
+```
+
+The average percent error of `bic_new` model is around 14.28%, which is acceptable. 
+
+```{r}
+plot(test_data$like_o, predict(bic_new, test_data), xlim = c(0, 10), ylim = c(0, 10), col = "darkgrey", xlab = "Actual values", ylab = "Predicted values", main = "Actual VS Predicted")
+grid()
+abline(0, 1, col = "orange", lwd = 2)
+```
+
+## Discussion
+
+### 1. Explanation of the model in the context of the data
+```{r}
+coef(bic_new)
+```
+Based on the previous sections, we could derive the following formula: 
+
+\[
+\hat{\text{like_o}} = \hat\beta_0 + \hat\beta_1 x_{\text{attr_o}} + \hat\beta_2 x_{\text{sinc_o}} + \hat\beta_3 x_{\text{intel_o}} + \hat\beta_4 x_{\text{fun_o}} + \hat\beta_5 x_{\text{shar_o}} + \hat\beta_6 x_{\text{dec_o}} + \hat\beta_7 x_{\text{shar_o}} x_{\text{dec_o}}
+\]
+
+
+
+- $\hat{\beta_0}$ = `r coef(bic_new)[1]`, is the estimated mean ratings of like for a participant who receives **0 for attractiveness, 0 for sincere, 0 for intelligent, 0 for fun, 0 for shared interests/hobbies** from his/her speed dating partner and the partner expresses **no interest** to see him/her again (poor boy/girl!)
+
+- $\hat{\beta_1}$ = `r coef(bic_new)[2]`, is the estimated average change in ratings of like for an increase of 1-point in **attractive** for a participant who receives a fixed score of sincere, intelligent, fun and shared interests/hobbies from his/her speed dating partner
+
+- $\hat{\beta_2}$ = `r coef(bic_new)[3]`, is the estimated average change in ratings of like for an increase of 1-point in **sincere** for a participant who receives a fixed score of attractive, intelligent, fun and shared interests/hobbies from his/her speed dating partner
+
+- $\hat{\beta_3}$ = `r coef(bic_new)[4]`, is the estimated average change in ratings of like for an increase of 1-point in **intelligent** for a participant who receives a fixed score of attractive, sincere, fun and shared interests/hobbies from his/her speed dating partner
+
+- $\hat{\beta_4}$ = `r coef(bic_new)[5]`, is the estimated average change in ratings of like for an increase of 1-point in **fun** for a participant who receives a fixed score of attractive, sincere, intelligent and shared interests/hobbies from his/her speed dating partner
+
+- $\hat{\beta_5}$ = `r coef(bic_new)[6]`, is the estimated average change in ratings of like for an increase of 1-point in **shared interests/hobbies** for a participant who receives a fixed score of attractive, sincere, intelligent and fun from his/her speed dating partner and the partner expresses **no interest** to see him/her again
+
+- $\hat{\beta_6}$ = `r coef(bic_new)[7]`, is the estimate for $\beta_6$, the estimated **difference** in mean ratings of like for a participant who receives 0 for attractiveness, 0 for sincere, 0 for intelligent, 0 for fun, 0 for shared interests/hobbies from his/her speed dating partner between whether the partner expresses interest to see him/her again
+
+- $\hat{\beta_0} + \hat{\beta_6}$ = `r coef(bic_new)[1] + coef(bic_new)[7]`, is the estimated mean ratings of like for a participant who receives **0 for attractiveness, 0 for sincere, 0 for intelligent, 0 for fun, 0 for shared interests/hobbies** from his/her speed dating partner and the partner expresses **interest** to see him/her again
+
+- $\hat{\beta_7}$ = `r coef(bic_new)[8]`, is the estimated **difference** in mean ratings of like for an increase of 1-point in **shared interests/hobbies** for a participant who receives a fixed score of attractive, sincere, intelligent and fun from his/her speed dating partner between whether the partner expresses no interest to see him/her again
+
+- $\hat{\beta_5} + \hat{\beta_7}$ = `r coef(bic_new)[6] + coef(bic_new)[8]`,is the estimated average change in ratings of like for an increase of 1-point in **shared interests/hobbies** for a participant who receives a fixed score of attractive, sincere, intelligent and fun from his/her speed dating partner and the partner expresses **interest** to see him/her again
+ 
+ 
+```{r}
+#coef(bic_new)
+beta_0_hat = coef(bic_new)[1]
+beta_1_hat = coef(bic_new)[2]
+beta_2_hat = coef(bic_new)[3]
+beta_3_hat = coef(bic_new)[4]
+beta_4_hat = coef(bic_new)[5]
+beta_5_hat = coef(bic_new)[6]
+beta_6_hat = coef(bic_new)[7]
+beta_7_hat = coef(bic_new)[8]
+```
+ 
+Since we have one dummy variable in the model, `dec_o`, we would like to consider two different scenarios: $\text{dec_o} = 0$ when the participant makes a decision not to see partner again; $\text{dec_o} = 1$ when the participant makes a decision to see partner again.
+
+Scenario 1: $\text{dec_o} = 0$
+```{r}
+dec_o_0 = coef(bic_new)[2:6]
+barplot(dec_o_0, ylim = c(0, 0.5), cex.names = 0.8, col = c("darkred", "indianred3", "orangered1", "red2" , "palevioletred1"), main = "beta comparison when dec_o = 0")
+grid()
+```
+
+From the plot above, we can see that how people rate their partners on attractiveness and shared-interest have the strongest correlation on their ratings of how much they like their partners **when they decide not to see them again**; fun and sincerity follow and intelligence has the least correlation in the model.  
+
+Scenario 2: $\text{dec_o} = 1$
+```{r}
+dec_o_1 = c(beta_1_hat, beta_2_hat, beta_3_hat, beta_4_hat, beta_5_hat + beta_7_hat)
+barplot(dec_o_1, ylim = c(0, 0.5), cex.names = 0.8, col = c("darkred", "indianred3", "orangered1", "red2" , "palevioletred1"), main = "beta comparison when dec_o = 1")
+grid()
+```
+
+From the plot above, we can see that **when people decide to see their partners again**, the correlation between how they rate their partners on like and rate on shared-interest drops a little; attractiveness remains the strongest correlation and the rest of variables stay the same.  
+
+
+### 2. Explore answers to the following questions
+
+- Does age difference correlate with how people like their partners?
+
+According to our model, no. 
+
+- Does gender difference correlate with how people like their partners?
+
+According to our model, no. 
+
+- Does race difference correlate with how people like their partners?
+
+According to our model, no. 
+
+- Does match correlate with how people like their partners? 
+
+According to our model, no (this result is a little suspicious, need more work to be done in future). 
+
+- Does attractiveness correlate with how people like their partners?
+
+According to our model, yes, attractiveness has one of strongest correlations. 
+
+- Does sincerity correlate with how people like their partners?
+
+According to our model, yes, sincerity has some correlation.
+
+- Does intelligence correlate with how people like their partners?
+
+According to our model, yes, intelligence has some correlation.
+
+- Does being fun correlate with how people like their partners?
+
+According to our model, yes, fun has one of strongest correlations.
+
+- Does ambition correlate with how people like their partners?
+
+According to our model, no. 
+
+- Does shared-interests correlate with how people like their partners?
+
+According to our model, yes, shared-interests has one of strongest correlations.
+
+- Does decision to see the partner again correlate with how people like their partners?
+
+According to our model, yes, different decisions have difference influence on how shared-interests relates with how people like their partners.  
+
+
+
+### 3. Why no transformation of response?
+
+```{r}
+sum(train_data$like_o == 0)
+```
+
+Since our response has non-positive value 0 (only 5 observations), we need to remove them before try box-cox transformation.
+
+```{r}
+bc_train = train_data[train_data$like_o > 0,]
+bc_model = lm(like_o ~ . , data = bc_train)
+boxcox(bc_model, plotit = TRUE)
+```
+
+From the plot above, we see that optimal $\lambda$ is around 1.3, which suggests we use transformation as below:
+
+```{r}
+bc_try = lm((like_o^1.3-1)/1.3 ~ . , data = bc_train)
+summary(bc_try)
+get_adj_r2(simple_model)
+get_adj_r2(bc_try)
+get_loocv_rmse(simple_model)
+get_loocv_rmse(bc_try)
+
+com_tables = data.frame("LOOCV_RMSE" = c(get_loocv_rmse(simple_model), get_loocv_rmse(bc_try)), "adj.R_2" = c(get_adj_r2(simple_model), get_adj_r2(bc_try)))
+rownames(com_tables) = c("Simple model", "Box-Cox model")
+knitr::kable(com_tables)
+```
+
+From above table we can see that, the `Box-Cox` model's adjusted $R^2$ increases by only `r (get_adj_r2(bc_try)-get_adj_r2(simple_model))/get_adj_r2(simple_model)*100`%, however, its `LOOCV_RMSE` increases by quite a large percentage, so we decide not to use transformation on response variable.
+
+### 4. Why no polynomial transformation of predictors? 
+
+```{r}
+model_pol = lm(like_o ~ . +  poly(age_o, 2) + poly(attr_o, 2)+poly(sinc_o, 2)+poly(intel_o, 2)+poly(fun_o, 2)+poly(amb_o, 2)+poly(shar_o, 2) , data = train_data)
+#summary(model_pol)$coef
+aic_pol = step(model_pol, direction = "backward", k = 2, trace = 0)
+bic_pol = step(model_pol, direction = "backward", k = log(length(resid(model_pol))), trace = 0)
+max(vif(aic_pol))
+max(vif(bic_pol))
+get_num_params(aic_pol)
+get_num_params(bic_pol)
+#all.equal(names(coef(aic_pol)), names(coef(bic_pol)))
+summary(bic_pol)$coef[1:12, 4] < alpha
+get_loocv_rmse(bic_pol)
+get_adj_r2(bic_pol)
+get_bp_decision(bic_pol, alpha)
+get_sw_decision(bic_pol, alpha)
+```
+
+We're using backward AIC and BIC again, starting with a model with quadratic terms for all possible variables. BIC selects a model with 2 predictors less than AIC and all quadratic terms are **not significant**. 
+
+### 5. Will the result change if the starting model has less attributes? 
+
+Based on the previous section, the additive model with all variables has the smallest maximum VIF among all the models, which is `r max(vif(simple_model))`. We will discuss if result changes when model selection starts with an additive model containing six attributes.  
+```{r}
+model_test = lm(like_o ~ attr_o + sinc_o + intel_o + fun_o + amb_o + shar_o, data = train_data)
+summary(model_test)$coef
+max(vif(model_test))
+plot_fitted_resid(model_test)
+plot_qq(model_test)
+get_bp_decision(model_test, alpha)
+get_sw_decision(model_test, alpha)
+get_num_params(model_test)
+get_loocv_rmse(model_test)
+get_adj_r2(model_test)
+```
+##### 5.1 AIC and BIC selection procedures
+
+```{r}
+aic_test = step(model_test, direction = "backward", k = 2, trace = 0)
+bic_test = step(model_test, direction = "backward", k = log(length(resid(model_test))), trace = 0)
+all.equal(names(coef(aic_test)), names(coef(bic_test)))
+summary(aic_test)$coef
+max(vif(aic_test))
+plot_fitted_resid(aic_test)
+plot_qq(aic_test)
+get_bp_decision(aic_test, alpha)
+get_sw_decision(aic_test, alpha)
+get_num_params(aic_test)
+get_loocv_rmse(aic_test)
+get_adj_r2(aic_test)
+```
+Both AIC and BIC select the same model. 
+
+##### 5.2 Model Comparison
+
+Next, make a table to list maximum VIF, number of $\beta$s, `LOOCV_RMSE` and adjusted $R^2$ for comparison with `aic_test` model and `bic_new` model. 
+
+```{r}
+tables_5 = data.frame("max_VIF" = c(max(vif(aic_test)), max(vif(bic_new))), "Number_of_betas" = c(get_num_params(aic_test), get_num_params(bic_new)), "LOOCV_RMSE" = c(get_loocv_rmse(aic_test), get_loocv_rmse(bic_new)), "adj.R_2" = c(get_adj_r2(aic_test), get_adj_r2(bic_new)))
+rownames(tables_5) = c("AIC_test", "BIC_new")
+knitr::kable(tables_5)
+```
+
+From the table above, we could tell that even though `aic_test` model has a smaller maximum VIF and number of $\beta$,it **hasn't improved on values of `LOOCV_RMSE` and adjusted $R^2$** compared with `bic_new` model. 
+
+Next, make an `F` test between two models. 
+
+```{r}
+anova(aic_test, bic_new)
+```
+
+The null hypothesis: $\beta_\text{dec_o} = \beta_\text{shar_o:dec_o} = 0$
+
+Decision: 
+
+Based on the p-value of above `F` test is pretty small, we reject the null hypothesis, so we prefer the larger model (`bic_new` model, the previous "best" model). 
+
+**In conclusion, the "best" model remains the same even when we start a model with less selected attributes. **
+
+### 6. Outlier diagnostics
+
+##### 6.1 Check high leverage:
+```{r}
+hat_values_aic = hatvalues(aic_new)[hatvalues(aic_new) > 2 * mean(hatvalues(aic_new))]
+hat_values_bic = hatvalues(bic_new)[hatvalues(bic_new) > 2 * mean(hatvalues(bic_new))]
+length(hat_values_aic)
+length(hat_values_bic)
+```
+We could say that there are `r length(hat_values_aic)` observations in `aic_new` model and `r length(hat_values_bic)` observations in `bic_new` model that are points of high leverage with great **potential** influence on the model. 
+
+##### 6.2 Check influential observations:
+```{r}
+cooks_dis_aic = cooks.distance(aic_new)[cooks.distance(aic_new) > 4 / length(cooks.distance(aic_new))]
+cooks_dis_bic = cooks.distance(bic_new)[cooks.distance(bic_new) > 4 / length(cooks.distance(bic_new))]
+length(cooks_dis_aic)
+length(cooks_dis_bic)
+```
+
+##### 6.3 Refit the selected models by removing any observations identified as influential and compare with the old pair of models:
+
+```{r}
+###remove the influential boservations in aic model
+int_model_sub_aic = lm(like_o ~ . + age_o : shar_o + attr_o : samerace + shar_o : dec_o + gender : dec_o, data = train_data, subset = cooks.distance(aic_new) <= 4 / length(cooks.distance(aic_new)))
+###remove the influential boservations in bic model
+int_model_sub_bic = lm(like_o ~ . + age_o : shar_o + attr_o : samerace + shar_o : dec_o + gender : dec_o, data = train_data, subset = cooks.distance(bic_new) <= 4 / length(cooks.distance(bic_new)))
+aic_new_sub = step(int_model_sub_aic, direction = "backward", trace = 0)
+bic_new_sub = step(int_model_sub_bic, direction = "backward", k = log(nrow(train_data)), trace = 0)
+```
+
+Compare on maximum VIF and number of predictors. 
+
+```{r}
+max(vif(aic_new_sub))
+max(vif(bic_new_sub))
+length(coef(aic_new_sub))
+length(coef(bic_new_sub))
+#all.equal(names(coef(aic_new)), names(coef(aic_new_sub))) 
+all.equal(names(coef(bic_new)), names(coef(bic_new_sub))) 
+get_bp_decision(aic_new_sub, alpha)
+get_bp_decision(bic_new_sub, alpha)
+get_sw_decision(aic_new_sub, alpha)
+get_sw_decision(bic_new_sub, alpha)
+```
+From the above code, we could tell that by removing the influential observations, the aic model gets two predictors less and bic model's number of predictors remains the same.
+
+Compare two pairs of selected models on `LOOCV_RMSE`, numbers of $\beta$s, maximum VIF and adjusted $R ^ 2$
+```{r}
+tables_2 = data.frame("max_VIF" = c(max(vif(aic_new)), max(vif(aic_new_sub)), max(vif(bic_new)), max(vif(bic_new_sub))), "Number_of_betas" = c(get_num_params(aic_new), get_num_params(aic_new_sub), get_num_params(bic_new), get_num_params(bic_new_sub)), "LOOCV_RMSE" = c(get_loocv_rmse(aic_new), get_loocv_rmse(aic_new_sub), get_loocv_rmse(bic_new), get_loocv_rmse(bic_new_sub)), "adj.R_2" = c(get_adj_r2(aic_new), get_adj_r2(aic_new_sub), get_adj_r2(bic_new), get_adj_r2(bic_new_sub)))
+rownames(tables_2) = c("AIC_new", "AIC_new_sub", "BIC_new", "BIC_new_sub")
+knitr::kable(tables_2)
+```
+
+
+From the table above, for both `aic_new` model and `bic_new` model, their `LOOCV_RMSE` decreases and adjusted $R^2$ increases which is an expected result by removing the influential observations. However, **maximum VIF of both models increase which is considered as a drawback**.
+
+Next, we will evaluate the four models by calculating the average percentage error. 
+
+```{r}
+erro_1 = get_prec_err(predict(aic_new, test_data), test_data$like_o)
+erro_2 = get_prec_err(predict(aic_new_sub, test_data), test_data$like_o)
+erro_3 = get_prec_err(predict(bic_new, test_data), test_data$like_o)
+erro_4 = get_prec_err(predict(bic_new_sub, test_data), test_data$like_o)
+```
+```{r}
+tables_erro = data.frame("Average_percentage_error" = c(erro_1, erro_2, erro_3, erro_4))
+rownames(tables_erro) = c("AIC_new", "AIC_new_sub", "BIC_new", "BIC_new_sub")
+knitr::kable(tables_erro)
+```
+
+When apply the two subsest models to test data, we don't see error rate drop dramatically. Besides, the quantity of influential observations is less than 10% of total `train_data` subset observations, therefore we decide not to remove any outlier at this stage.
+
+
+**In conclusion, our "best" model stays the same as following:**
+
+
+\[
+\hat{\text{like_o}} = \hat\beta_0 + \hat\beta_1 x_{\text{attr_o}} + \hat\beta_2 x_{\text{sinc_o}} + \hat\beta_3 x_{\text{intel_o}} + \hat\beta_4 x_{\text{fun_o}} + \hat\beta_5 x_{\text{shar_o}} + \hat\beta_6 x_{\text{dec_o}} + \hat\beta_7 x_{\text{shar_o}} x_{\text{dec_o}}
+\]
+
+
+## Appendix
+
+- Overview of the whole data set, `train_data` subset and `test_data` subset
+```{r}
+###data_set
+head(selected_data, 20)
+###train_data
+head(train_data, 20)
+###test_data
+head(test_data, 20)
+str(selected_data)
+```
+
+- Pairs plot
+```{r}
+pairs(train_data, col = "dodgerblue")
+```
+
+- Observations with high leverage
+```{r}
+###in aic_new model
+hat_values_aic
+```
+```{r}
+###in bic_new model
+hat_values_bic
+```
+- Observations identified as influential
+```{r}
+###in aic_new model
+cooks_dis_aic
+```
+```{r}
+###in bic_new model
+cooks_dis_bic
+```
+
+
+
